@@ -35,7 +35,8 @@ enum luv_type {
   LUV_TCP     = 0x08,
   LUV_TTY     = 0x10,
   LUV_PIPE    = 0x20,
-  LUV_PROCESS = 0x40
+  LUV_PROCESS = 0x40,
+  LUV_UDP     = 0x80
 };
 
 /* Mask is the types that can be extracted from this concrete type */
@@ -44,7 +45,8 @@ enum luv_mask {
   LUV_TCP_MASK      = LUV_HANDLE | LUV_STREAM | LUV_TCP,
   LUV_TTY_MASK      = LUV_HANDLE | LUV_STREAM | LUV_TTY,
   LUV_PIPE_MASK     = LUV_HANDLE | LUV_STREAM | LUV_PIPE,
-  LUV_PROCESS_MASK  = LUV_HANDLE | LUV_PROCESS
+  LUV_PROCESS_MASK  = LUV_HANDLE | LUV_PROCESS,
+  LUV_UDP_MASK      = LUV_HANDLE | LUV_STREAM | LUV_UDP
 };
 
 /* luv handles are used as the userdata type that points to uv handles.
@@ -79,6 +81,7 @@ uv_tcp_t* luv_create_tcp(lua_State* L);
 uv_tty_t* luv_create_tty(lua_State* L);
 uv_pipe_t* luv_create_pipe(lua_State* L);
 uv_process_t* luv_create_process(lua_State* L);
+uv_udp_t* luv_create_udp(lua_State* L);
 
 uv_handle_t* luv_get_handle(lua_State* L, int index);
 uv_timer_t* luv_get_timer(lua_State* L, int index);
@@ -87,6 +90,7 @@ uv_tcp_t* luv_get_tcp(lua_State* L, int index);
 uv_tty_t* luv_get_tty(lua_State* L, int index);
 uv_pipe_t* luv_get_pipe(lua_State* L, int index);
 uv_process_t* luv_get_process(lua_State* L, int index);
+uv_udp_t* luv_get_udp(lua_State* L, int index);
 
 void luv_handle_ref(lua_State* L, luv_handle_t* lhandle, int index);
 void luv_handle_unref(lua_State* L, luv_handle_t* lhandle);

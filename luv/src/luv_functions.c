@@ -44,6 +44,16 @@ static int new_pipe(lua_State* L) {
   return 1;
 }
 
+static int new_udp(lua_State* L) {
+  uv_udp_t* handle = luv_create_udp(L);
+  if (uv_udp_init(uv_default_loop(), handle)) {
+    uv_err_t err = uv_last_error(uv_default_loop());
+    return luaL_error(L, "new_udp: %s", uv_strerror(err));
+  }
+//  fprintf(stderr, "new udp \tlhandle=%p handle=%p\n", handle->data, handle);
+  return 1;
+}
+
 static int luv_run(lua_State* L) {
   const char* mode_string = luaL_checkstring(L, 1);
   int mode;
@@ -1259,6 +1269,92 @@ static int luv_tcp_keepalive(lua_State* L) {
 #endif
   return 0;
 }
+
+
+/******************************************************************************/
+
+static int luv_udp_bind(lua_State* L) {
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L);
+#endif
+  uv_udp_t* handle = luv_get_udp(L, 1);
+  const char* host = luaL_checkstring(L, 2);
+  int port = luaL_checkint(L, 3);
+
+  struct sockaddr_in address = uv_ip4_addr(host, port);
+  unsigned unused_flags = 0;
+
+  if (uv_udp_bind(handle, address, unused_flags)) {
+    uv_err_t err = uv_last_error(uv_default_loop());
+    return luaL_error(L, "udp_bind: %s", uv_strerror(err));
+  }
+
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+  return 0;
+}
+
+
+static int luv_udp_getsockname(lua_State* L) {
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L);
+#endif
+  uv_udp_t* handle = luv_get_udp(L, 1);
+  int port = 0;
+  char ip[INET6_ADDRSTRLEN];
+  int family;
+
+  struct sockaddr_storage address;
+  int addrlen = sizeof(address);
+
+  if (uv_udp_getsockname(handle, (struct sockaddr*)(&address), &addrlen)) {
+    uv_err_t err = uv_last_error(uv_default_loop());
+    return luaL_error(L, "udp_getsockname: %s", uv_strerror(err));
+  }
+
+  family = address.ss_family;
+  if (family == AF_INET) {
+    struct sockaddr_in* addrin = (struct sockaddr_in*)&address;
+    uv_inet_ntop(AF_INET, &(addrin->sin_addr), ip, INET6_ADDRSTRLEN);
+    port = ntohs(addrin->sin_port);
+  } else if (family == AF_INET6) {
+    struct sockaddr_in6* addrin6 = (struct sockaddr_in6*)&address;
+    uv_inet_ntop(AF_INET6, &(addrin6->sin6_addr), ip, INET6_ADDRSTRLEN);
+    port = ntohs(addrin6->sin6_port);
+  }
+
+  lua_newtable(L);
+  lua_pushnumber(L, port);
+  lua_setfield(L, -2, "port");
+  lua_pushnumber(L, family);
+  lua_setfield(L, -2, "family");
+  lua_pushstring(L, ip);
+  lua_setfield(L, -2, "address");
+
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top + 1);
+#endif
+  return 1;
+}
+
+
+static int luv_udp_open(lua_State* L) {
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L);
+#endif
+  uv_tcp_t* handle = luv_get_udp(L, 1);
+  uv_os_sock_t sock = luaL_checkint(L, 2);
+  if (uv_udp_open(handle, sock)) {
+    uv_err_t err = uv_last_error(uv_default_loop());
+    return luaL_error(L, "udp_open: %s", uv_strerror(err));
+  }
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+  return 0;
+}
+
 
 /******************************************************************************/
 
