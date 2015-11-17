@@ -54,7 +54,7 @@ local function handle(client)
       if h.checktype("common") then
          uv.read_start(client)
       elseif h.checktype("udp") then
-         uv.udp_recv_start(client)
+         --uv.udp_recv_start(client)
       else
          h.reading = false
       end
@@ -324,6 +324,8 @@ local function handle(client)
          return d
       end
    end
+
+
 
    return h
 end
