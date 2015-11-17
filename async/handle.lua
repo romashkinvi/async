@@ -13,6 +13,9 @@ local fiber = require 'async.fiber'
 local function handle(client)
    -- handle wraper:
    local h = {}
+   
+   -- types of supported abstaractions
+   local types = { common = true, udp = true }
 
    -- default callbacks:
    client.onend = function()
@@ -28,12 +31,34 @@ local function handle(client)
 
    -- common read/write abstractions:
    h.reading = false
+   h.type = "common"
+
+   h.settype = function(name)
+      local sname = tostring(name)
+      for n, _ in pairs(types) do
+         if sname == n then
+            h.type = sname
+         end
+      end
+   end
+   h.checktype = function(name)
+      return h.type == "common" and types[name]
+   end
+   h.settype("common")
+
    h.ondata = function(cb)
       client.ondata = function(self,data)
          if cb then cb(data) end
       end
-      uv.read_start(client)
       h.reading = true
+      if h.checktype("common") then
+         uv.read_start(client)
+      elseif h.checktype("udp") then
+         uv.udp_recv_start(client)
+      else
+         h.reading = false
+      end
+
    end
 
    h.onrawdata = function(cb)
@@ -41,8 +66,14 @@ local function handle(client)
          local buf = b(len,data)
          if cb then cb(buf) end
       end
-      uv.read_start_raw(client)
       h.reading = true
+      if h.checktype("common") then
+         uv.read_start(client)
+      elseif h.checktype("udp") then
+         uv.udp_recv_start(client)
+      else
+         h.reading = false
+      end
    end
 
    h.onerr = function(cb)

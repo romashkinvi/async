@@ -1343,12 +1343,82 @@ static int luv_udp_open(lua_State* L) {
 #ifdef LUV_STACK_CHECK
   int top = lua_gettop(L);
 #endif
-  uv_tcp_t* handle = luv_get_udp(L, 1);
+  uv_udp_t* handle = luv_get_udp(L, 1);
   uv_os_sock_t sock = luaL_checkint(L, 2);
   if (uv_udp_open(handle, sock)) {
     uv_err_t err = uv_last_error(uv_default_loop());
     return luaL_error(L, "udp_open: %s", uv_strerror(err));
   }
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+  return 0;
+}
+
+
+/*
+ * Callback that is invoked when a new UDP datagram is received.
+ */
+//static void luv_on_recv(uv_stream_t* handle, ssize_t nread, uv_buf_t buf) {
+static void luv_on_recv(uv_udp_t* handle, ssize_t nread, uv_buf_t buf,
+    struct sockaddr* addr, unsigned flags) {
+  lua_State* L = luv_prepare_event(handle->data);
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L) - 1;
+#endif
+  //fprintf(stderr, "TODO: Implement udp receive method\n");
+  fprintf(stderr, "Debug | nread: %d\n", nread);
+  if (nread >= 0) {
+    int r = luv_get_callback(L, "ondata");
+    fprintf(stderr, "Debug | ondata: %d\n", r);
+    if (r) {
+      fprintf(stderr, "Debug | ondata\n");
+      lua_pushlstring (L, buf.base, nread);
+      luv_call(L, 2, 0);
+    }
+  } else {
+    // processing of errors
+    uv_err_t err = uv_last_error(uv_default_loop());
+    fprintf(stderr, "Debug | err: %d\n", err.code);
+    if (err.code == UV_EOF) {
+      if (luv_get_callback(L, "onend")) {
+        luv_call(L, 1, 0);
+      }
+    } else if (err.code != UV_ECONNRESET) {
+      uv_udp_recv_stop(handle);
+      uv_close((uv_handle_t*)handle, NULL);
+      /* TODO: route reset events somewhere so the user knows about them */
+      fprintf(stderr, "TODO: Implement async error handling\n");
+      assert(0);
+    } else {
+      // Handling errors
+      if (luv_get_callback(L, "onerr")) {
+        lua_pushnumber(L, err.code);
+        luv_call(L, 2, 0);
+      }
+    }
+  }
+
+  free(buf.base);
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+}
+
+
+static int luv_udp_recv_start(lua_State* L) {
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L);
+#endif
+  uv_udp_t* handle = luv_get_udp(L, 1);
+
+  uv_udp_recv_start(handle, luv_on_alloc, luv_on_recv);
+  luv_handle_ref(L, handle->data, 1);
+
+//  if (uv_udp_open(handle, sock)) {
+//    uv_err_t err = uv_last_error(uv_default_loop());
+//    return luaL_error(L, "udp_recv_start: %s", uv_strerror(err));
+//  }
 #ifdef LUV_STACK_CHECK
   assert(lua_gettop(L) == top);
 #endif
@@ -2105,6 +2175,7 @@ static const luaL_Reg luv_functions[] = {
   {"new_timer", new_timer},
   {"new_tty", new_tty},
   {"new_pipe", new_pipe},
+  {"new_udp", new_udp},
   {"run", luv_run},
   {"guess_handle", luv_guess_handle},
   {"update_time", luv_update_time},
@@ -2155,6 +2226,11 @@ static const luaL_Reg luv_functions[] = {
   {"tcp_open", luv_tcp_open},
   {"tcp_nodelay", luv_tcp_nodelay},
   {"tcp_keepalive", luv_tcp_keepalive},
+
+  {"udp_bind", luv_udp_bind},
+  {"udp_getsockname", luv_udp_getsockname},
+  {"udp_open", luv_udp_open},
+  {"udp_recv_start", luv_udp_recv_start},
 
   {"tty_set_mode", luv_tty_set_mode},
   {"tty_reset_mode", luv_tty_reset_mode},
