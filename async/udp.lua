@@ -40,24 +40,12 @@ function udp.listen(domain, cb)
       local host = domain.host
       local port = domain.port
       uv.udp_bind(server, host, port)
-      --function server:onconnection()
-      --   local client = uv.new_udp()
-      --   uv.accept(server, client)
-      --   local h = handle(client)
-      --   h.sockname = uv.udp_getsockname(client)
-      --   h.peername = uv.udp_getpeername(client)
-      --   cb(h)
-      --end
-      --uv.listen(server)
       uv.udp_recv_start(server)
    end)
    local h = handle(server)
    h.settype("udp")
    cb(h)
-   print('serverhandle: ', tostring(h))
-   print('server: ', server)
    return h
-   --return handle(server)
 end
 
 function udp.connect(domain, cb)

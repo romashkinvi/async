@@ -1366,21 +1366,41 @@ static void luv_on_recv(uv_udp_t* handle, ssize_t nread, uv_buf_t buf,
 #ifdef LUV_STACK_CHECK
   int top = lua_gettop(L) - 1;
 #endif
-  //fprintf(stderr, "TODO: Implement udp receive method\n");
-  fprintf(stderr, "Debug | nread: %d\n", nread);
-  if (nread >= 0) {
-    int r = luv_get_callback(L, "ondata");
-    fprintf(stderr, "Debug | ondata: %d\n", r);
+  if (( nread >= 0 ) && ( addr != NULL )) {
+    int r = luv_get_callback(L, "ondatagram");
     if (r) {
-      fprintf(stderr, "Debug | ondata\n");
+
+      int port = 0;
+      char ip[INET6_ADDRSTRLEN];
+      int family;
+      
+      family = (int)(((struct sockaddr_storage*)addr)->ss_family);
+      if (family == AF_INET) {
+        struct sockaddr_in* addrin = (struct sockaddr_in*)addr;
+        uv_inet_ntop(AF_INET, &(addrin->sin_addr), ip, INET6_ADDRSTRLEN);
+        port = ntohs(addrin->sin_port);
+      } else if (family == AF_INET6) {
+        struct sockaddr_in6* addrin6 = (struct sockaddr_in6*)addr;
+        uv_inet_ntop(AF_INET6, &(addrin6->sin6_addr), ip, INET6_ADDRSTRLEN);
+        port = ntohs(addrin6->sin6_port);
+      }
+
       lua_pushlstring (L, buf.base, nread);
-      luv_call(L, 2, 0);
+      lua_newtable(L);
+      lua_pushnumber(L, port);
+      lua_setfield(L, -2, "port");
+      lua_pushnumber(L, family);
+      lua_setfield(L, -2, "family");
+      lua_pushstring(L, ip);
+      lua_setfield(L, -2, "address");
+      lua_pushnumber(L, flags);
+
+      luv_call(L, 4, 0);
     }
   } else {
     // processing of errors
     uv_err_t err = uv_last_error(uv_default_loop());
-    fprintf(stderr, "Debug | err: %d\n", err.code);
-    if (err.code == UV_EOF) {
+    if ( (err.code == UV_EOF) || ((nread == 0) && (addr == NULL)) ) {
       if (luv_get_callback(L, "onend")) {
         luv_call(L, 1, 0);
       }
@@ -1388,6 +1408,7 @@ static void luv_on_recv(uv_udp_t* handle, ssize_t nread, uv_buf_t buf,
       uv_udp_recv_stop(handle);
       uv_close((uv_handle_t*)handle, NULL);
       /* TODO: route reset events somewhere so the user knows about them */
+      fprintf(stderr, "%s: %s\n", uv_err_name(err), uv_strerror(err) );
       fprintf(stderr, "TODO: Implement async error handling\n");
       assert(0);
     } else {
@@ -1419,6 +1440,20 @@ static int luv_udp_recv_start(lua_State* L) {
 //    uv_err_t err = uv_last_error(uv_default_loop());
 //    return luaL_error(L, "udp_recv_start: %s", uv_strerror(err));
 //  }
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+  return 0;
+}
+
+
+static int luv_udp_recv_stop(lua_State* L) {
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L);
+#endif
+  uv_udp_t* handle = luv_get_udp(L, 1);
+  luv_handle_unref(L, handle->data);
+  uv_udp_recv_stop(handle);
 #ifdef LUV_STACK_CHECK
   assert(lua_gettop(L) == top);
 #endif
@@ -2231,6 +2266,7 @@ static const luaL_Reg luv_functions[] = {
   {"udp_getsockname", luv_udp_getsockname},
   {"udp_open", luv_udp_open},
   {"udp_recv_start", luv_udp_recv_start},
+  {"udp_recv_stop", luv_udp_recv_stop},
 
   {"tty_set_mode", luv_tty_set_mode},
   {"tty_reset_mode", luv_tty_reset_mode},

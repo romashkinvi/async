@@ -15,23 +15,12 @@ local function handle(client)
    local h = {}
    
    -- types of supported abstaractions
-   local types = { common = true, udp = true }
+   local DEFAULT_TYPE = "common"
+   local UDP_TYPE = "udp"
 
-   -- default callbacks:
-   client.onend = function()
-      if h.reading then
-         uv.read_stop(client)
-         uv.close(client)
-      end
-   end
-   client.onerr = function()
-      if h.reading then uv.read_stop(client) end
-      uv.close(client)
-   end
-
-   -- common read/write abstractions:
-   h.reading = false
-   h.type = "common"
+   local types = {}
+   types[DEFAULT_TYPE] = true
+   types[UDP_TYPE] = true
 
    h.settype = function(name)
       local sname = tostring(name)
@@ -41,24 +30,49 @@ local function handle(client)
          end
       end
    end
+   
    h.checktype = function(name)
-      return h.type == "common" and types[name]
+      return h.type == name and types[name]
    end
-   h.settype("common")
+   
+   h.settype(DEFAULT_TYPE)
+
+   -- default callbacks:
+   client.onend = function()
+      if h.reading then
+         if h.checktype(DEFAULT_TYPE) then
+            uv.read_stop(client)
+         elseif h.checktype(UDP_TYPE) then
+            uv.udp_recv_stop(client)
+         end
+         uv.close(client)
+         h.reading = false
+      end
+   end
+
+   -- default error handler
+   client.onerr = function(self, code)
+      print('error on client - code: ' .. code)
+      if h.reading then
+         if h.checktype(DEFAULT_TYPE) then
+            uv.read_stop(client)
+         elseif h.checktype(UDP_TYPE) then
+            uv.udp_recv_stop(client)
+         end
+         h.reading = false
+      end
+      uv.close(client)
+   end
+
+   -- common read/write abstractions:
+   h.reading = false
 
    h.ondata = function(cb)
       client.ondata = function(self,data)
          if cb then cb(data) end
       end
+      uv.read_start(client)
       h.reading = true
-      if h.checktype("common") then
-         uv.read_start(client)
-      elseif h.checktype("udp") then
-         --uv.udp_recv_start(client)
-      else
-         h.reading = false
-      end
-
    end
 
    h.onrawdata = function(cb)
@@ -66,32 +80,40 @@ local function handle(client)
          local buf = b(len,data)
          if cb then cb(buf) end
       end
+      uv.read_start(client)
       h.reading = true
-      if h.checktype("common") then
-         uv.read_start(client)
-      elseif h.checktype("udp") then
-         uv.udp_recv_start(client)
-      else
-         h.reading = false
-      end
    end
 
    h.onerr = function(cb)
       client.onerr = function(self,code)
          if cb then cb(code) end
-         if h.reading then uv.read_stop(client) end
+         if h.reading then
+            if h.checktype(DEFAULT_TYPE) then
+               uv.read_stop(client)
+            elseif h.checktype(UDP_TYPE) then
+               uv.udp_recv_stop(client)
+            end
+         end
+         h.reading = false
          uv.close(client)
       end
    end
+
    h.onend = function(cb)
       client.onend = function(self)
          if cb then cb() end
          if h.reading then
-            uv.read_stop(client)
+            if h.checktype(DEFAULT_TYPE) then
+               uv.read_stop(client)
+            elseif h.checktype(UDP_TYPE) then
+               uv.udp_recv_stop(client)
+            end
+            h.reading = false
             uv.close(client)
          end
       end
    end
+
    h.onclose = function(cb)
       client.onclose = function(self)
          if cb then cb() end
@@ -112,19 +134,13 @@ local function handle(client)
          uv.write(client, data, cb)
       end
    end
+
    h.close = function(cb)
       uv.shutdown(client, function()
          if h.reading then uv.read_stop(client); end
          uv.close(client)
          if cb then cb() end
       end)
-   end
-
-   -- default error handler
-   client.onerr = function(self, code)
-      print('error on client - code: ' .. code)
-      if h.reading then uv.read_stop(client); end
-      uv.close(client)
    end
 
    -- convenience function to split a stream,
@@ -324,8 +340,15 @@ local function handle(client)
          return d
       end
    end
+   
+   -- UDP support
 
-
+   h.ondatagram = function(cb)
+      client.ondatagram = function(self, data, domain, flags)
+         if cb then cb(data, domain, flags) end
+      end
+      h.reading = true
+   end
 
    return h
 end
