@@ -42,10 +42,10 @@ local function handle(client)
       if h.reading then
          if h.checktype(DEFAULT_TYPE) then
             uv.read_stop(client)
-         elseif h.checktype(UDP_TYPE) then
-            uv.udp_recv_stop(client)
+            uv.close(client)
+         --elseif h.checktype(UDP_TYPE) then
+         --   uv.udp_recv_stop(client)
          end
-         uv.close(client)
          h.reading = false
       end
    end
@@ -105,11 +105,11 @@ local function handle(client)
          if h.reading then
             if h.checktype(DEFAULT_TYPE) then
                uv.read_stop(client)
-            elseif h.checktype(UDP_TYPE) then
-               uv.udp_recv_stop(client)
+               uv.close(client)
+            --elseif h.checktype(UDP_TYPE) then
+            --   uv.udp_recv_stop(client)
             end
             h.reading = false
-            uv.close(client)
          end
       end
    end
@@ -348,6 +348,14 @@ local function handle(client)
          if cb then cb(data, domain, flags) end
       end
       h.reading = true
+   end
+
+   h.stopdatagram = function(cb)
+      client.stopdatagram = function(self)
+         if cb then cb() end
+      end
+      --h.reading = true
+      uv.udp_recv_stop(client)
    end
 
    return h

@@ -48,6 +48,11 @@ function udp.listen(domain, cb)
    return h
 end
 
+function udp.stoplisten(server)
+   uv.udp_recv_stop(server)
+   return server
+end
+
 function udp.connect(domain, cb)
    local client = uv.new_udp()
    local h = handle(client)
