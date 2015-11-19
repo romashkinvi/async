@@ -136,11 +136,17 @@ local function handle(client)
    end
 
    h.close = function(cb)
-      uv.shutdown(client, function()
+      if h.checktype(DEFAULT_TYPE) then
+         uv.shutdown(client, function()
+            if h.reading then uv.read_stop(client); end
+            uv.close(client)
+            if cb then cb() end
+         end)
+      elseif h.checktype(UDP_TYPE) then
          if h.reading then uv.read_stop(client); end
          uv.close(client)
          if cb then cb() end
-      end)
+      end
    end
 
    -- convenience function to split a stream,
