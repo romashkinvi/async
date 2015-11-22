@@ -123,15 +123,19 @@ local function handle(client)
    local refs = {}
 
    h.write = function(data,cb)
-      if type(data) == "table" then
-         refs[data.ctype] = data -- make sure buffer isnt GCed
+      if h.checktype(DEFAULT_TYPE) then
+         if type(data) == "table" then
+            refs[data.ctype] = data -- make sure buffer isnt GCed
 
-         uv.write_raw(client, tonumber(ffi.cast("long", data.ctype)), data.length, function(...)
-            refs[data.ctype] = nil
-            if cb then cb(...) end
-         end)
-      else
-         uv.write(client, data, cb)
+            uv.write_raw(client, tonumber(ffi.cast("long", data.ctype)), data.length, function(...)
+               refs[data.ctype] = nil
+               if cb then cb(...) end
+            end)
+         else
+            uv.write(client, data, cb)
+         end
+      elseif h.checktype(UDP_TYPE) then
+         uv.udp_send(client, data, h.sockname, cb)
       end
    end
 

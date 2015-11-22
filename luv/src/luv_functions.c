@@ -1461,6 +1461,86 @@ static int luv_udp_recv_stop(lua_State* L) {
 }
 
 
+static void luv_after_udp_send(uv_udp_send_t* req, int status) {
+  lua_State* L = luv_prepare_callback(req->data);
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L) - 1;
+#endif
+  if (lua_isfunction(L, -1)) {
+    luv_call(L, 0, 0);
+  } else {
+    lua_pop(L, 1);
+  }
+
+  luv_handle_unref(L, req->handle->data);
+  free(req->data);
+  free(req);
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+}
+
+
+static int luv_udp_send(lua_State* L) {
+#ifdef LUV_STACK_CHECK
+  int top = lua_gettop(L);
+#endif
+  uv_udp_t* handle = luv_get_udp(L, 1);
+
+  uv_udp_send_t* req = malloc(sizeof(*req));
+  luv_req_t* lreq = malloc(sizeof(*lreq));
+
+  req->data = (void*)lreq;
+
+  lreq->lhandle = handle->data;
+
+  // Reference the string in the registry
+  lua_pushvalue(L, 2);
+  lreq->data_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  // get IP and port
+  lua_getfield(L, 3, "address");
+  const char* host = luaL_checkstring(L, -1);
+  lua_pop(L, 1);
+  lua_getfield(L, 3, "port");
+  int port = luaL_checkint(L, -1);
+ lua_pop(L, 1);
+  struct sockaddr_in address = uv_ip4_addr(host, port);
+
+  // Reference the callback in the registry
+  lua_pushvalue(L, 4);
+  lreq->callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+  luv_handle_ref(L, handle->data, 1);
+
+  if (lua_istable(L, 2)) {
+    int length, i;
+    length = lua_rawlen(L, 2);
+    uv_buf_t* bufs = malloc(sizeof(uv_buf_t) * length);
+    for (i = 0; i < length; i++) {
+      lua_rawgeti(L, 2, i + 1);
+      size_t len;
+      const char* chunk = luaL_checklstring(L, -1, &len);
+      bufs[i] = uv_buf_init((char*)chunk, len);
+      lua_pop(L, 1);
+    }
+    uv_udp_send(req, handle, bufs, length, address, luv_after_udp_send);
+    /* TODO: find out if it's safe to free this soon */
+    free(bufs);
+  }
+  else {
+    size_t len;
+    const char* chunk = luaL_checklstring(L, 2, &len);
+    uv_buf_t buf = uv_buf_init((char*)chunk, len);
+    uv_udp_send(req, handle, &buf, 1, address, luv_after_udp_send);
+  }
+  
+#ifdef LUV_STACK_CHECK
+  assert(lua_gettop(L) == top);
+#endif
+  return 0;
+}
+
+
 /******************************************************************************/
 
 static int luv_tty_set_mode(lua_State* L) {
@@ -2267,6 +2347,7 @@ static const luaL_Reg luv_functions[] = {
   {"udp_open", luv_udp_open},
   {"udp_recv_start", luv_udp_recv_start},
   {"udp_recv_stop", luv_udp_recv_stop},
+  {"udp_send", luv_udp_send},
 
   {"tty_set_mode", luv_tty_set_mode},
   {"tty_reset_mode", luv_tty_reset_mode},

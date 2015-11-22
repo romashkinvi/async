@@ -17,33 +17,19 @@ udp.protocols = {
 
 -- url parser:
 udp.parseUrl = function(url, cb)
-   if type(url) == 'string' then
-      local parseUrl = require 'lhttp_parser'.parseUrl
-      local parsed = parseUrl(url)
-      parsed.port = parsed.port or http.protocols[parsed.schema]
-      url = parsed
-   end
-   local isip = url.host:find('^%d*%.%d*%.%d*%.%d*$')
-   if not isip then
-      uv.getaddrinfo(url.host, url.port, nil, function(res)
-         url.host = (res[1] and res[1].addr) or error('could not resolve address: ' .. url.host)
-         cb(url)
-      end)
-   else
-      cb(url)
-   end
+   tcp.parseUrl(url, cb)
 end
 
 function udp.listen(domain, cb)
    local server = uv.new_udp()
    local h = handle(server)
    h.settype("udp")
-   tcp.parseUrl(domain, function(domain)
+   udp.parseUrl(domain, function(domain)
       local host = domain.host
       local port = domain.port
       uv.udp_bind(server, host, port)
-      uv.udp_recv_start(server)
       h.sockname = uv.udp_getsockname(server)
+      uv.udp_recv_start(server)
       cb(h)
    end)
    return h
@@ -52,13 +38,13 @@ end
 function udp.connect(domain, cb)
    local client = uv.new_udp()
    local h = handle(client)
-   tcp.parseUrl(domain, function(domain)
+   h.settype("udp")
+   udp.parseUrl(domain, function(domain)
       local host = domain.host
       local port = domain.port
-      uv.udp_connect(client, host, port, function()
-         h.sockname = uv.udp_getsockname(client)
-         cb(h)
-      end)
+      uv.udp_bind(client, host, port)
+      h.sockname = uv.udp_getsockname(client)
+      cb(h)
    end)
    return h
 end
